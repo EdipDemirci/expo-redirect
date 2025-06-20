@@ -60,10 +60,19 @@
             font-size: 16px;
             font-weight: 600;
             transition: background 0.3s;
+            margin: 10px;
         }
         
         .button:hover {
             background: #0056CC;
+        }
+        
+        .button.secondary {
+            background: #6c757d;
+        }
+        
+        .button.secondary:hover {
+            background: #545b62;
         }
         
         .status {
@@ -84,31 +93,64 @@
             color: #721c24;
             border: 1px solid #f1b0b7;
         }
+
+        .debug {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #bbdefb;
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            text-align: left;
+            font-family: monospace;
+            word-break: break-all;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="icon">🧭</div>
         <h1>Opening Travel Compass...</h1>
-        <p id="status">Redirecting you to the app...</p>
+        <p id="status">Processing authentication...</p>
         
-        <a href="#" id="openApp" class="button" style="display: none;">
-            Open Travel Compass
-        </a>
+        <div id="buttons" style="display: none;">
+            <a href="#" id="openApp" class="button">
+                Open Travel Compass
+            </a>
+            <br>
+            <a href="#" id="copyLink" class="button secondary">
+                Copy Link
+            </a>
+        </div>
         
         <div id="message" class="status" style="display: none;"></div>
+        
+        <div id="debug" class="debug" style="display: none;"></div>
     </div>
 
     <script>
+        function log(message) {
+            console.log(message);
+            const debugEl = document.getElementById('debug');
+            debugEl.innerHTML += message + '<br>';
+            debugEl.style.display = 'block';
+        }
+
         function getUrlParams() {
+            // Get both URL search params and hash params
             const urlParams = new URLSearchParams(window.location.search);
             const hashParams = new URLSearchParams(window.location.hash.substring(1));
             
-            // Merge both URL params and hash params
+            // Merge both
             const allParams = {};
+            
+            // Add URL params
             for (const [key, value] of urlParams) {
                 allParams[key] = value;
             }
+            
+            // Add hash params (Supabase sends auth tokens in hash)
             for (const [key, value] of hashParams) {
                 allParams[key] = value;
             }
@@ -117,60 +159,26 @@
         }
         
         function buildExpUrl(baseUrl, params) {
-            const url = new URL(baseUrl);
-            
-            // Add auth parameters to the URL hash
-            const authParams = [];
-            if (params.access_token) authParams.push(`access_token=${params.access_token}`);
-            if (params.refresh_token) authParams.push(`refresh_token=${params.refresh_token}`);
-            if (params.expires_in) authParams.push(`expires_in=${params.expires_in}`);
-            if (params.token_type) authParams.push(`token_type=${params.token_type}`);
-            
-            if (authParams.length > 0) {
-                url.hash = authParams.join('&');
-            }
-            
-            return url.toString();
-        }
-        
-        function redirect() {
-            const params = getUrlParams();
-            console.log('Received params:', params);
-            
-            // Get the target app URL from the 'app' parameter
-            let appUrl = params.app;
-            
-            if (!appUrl) {
-                // Default to development URL if no app parameter
-                appUrl = 'exp://192.168.1.102:8081/--/auth/callback';
-            } else {
-                // Decode the URL if it's encoded
-                appUrl = decodeURIComponent(appUrl);
-            }
-            
-            // Build the final URL with auth tokens
-            const finalUrl = buildExpUrl(appUrl, params);
-            
-            console.log('Final redirect URL:', finalUrl);
-            
-            // Show the manual button
-            const button = document.getElementById('openApp');
-            button.href = finalUrl;
-            button.style.display = 'inline-block';
-            
-            // Update status
-            const statusEl = document.getElementById('status');
-            if (params.access_token) {
-                statusEl.textContent = 'Authentication successful! Opening app...';
-                showMessage('✅ Login successful! If the app doesn\'t open automatically, tap the button below.', 'success');
+            try {
+                // Start with the base URL
+                let finalUrl = baseUrl;
                 
-                // Attempt automatic redirect after 1 second
-                setTimeout(() => {
-                    window.location.href = finalUrl;
-                }, 1000);
-            } else {
-                statusEl.textContent = 'No authentication data received.';
-                showMessage('⚠️ No authentication data found in the URL. Please try the magic link again.', 'error');
+                // Add auth parameters to the URL hash if they exist
+                const authParams = [];
+                if (params.access_token) authParams.push(`access_token=${params.access_token}`);
+                if (params.refresh_token) authParams.push(`refresh_token=${params.refresh_token}`);
+                if (params.expires_in) authParams.push(`expires_in=${params.expires_in}`);
+                if (params.token_type) authParams.push(`token_type=${params.token_type}`);
+                
+                if (authParams.length > 0) {
+                    // Add hash to the URL
+                    finalUrl += '#' + authParams.join('&');
+                }
+                
+                return finalUrl;
+            } catch (error) {
+                log('Error building URL: ' + error.message);
+                return baseUrl;
             }
         }
         
@@ -180,9 +188,100 @@
             messageEl.className = `status ${type}`;
             messageEl.style.display = 'block';
         }
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showMessage('Link copied to clipboard!', 'success');
+                }).catch(() => {
+                    showMessage('Could not copy to clipboard', 'error');
+                });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showMessage('Link copied to clipboard!', 'success');
+                } catch (err) {
+                    showMessage('Could not copy to clipboard', 'error');
+                }
+                document.body.removeChild(textArea);
+            }
+        }
         
-        // Start the redirect process
-        redirect();
+        function redirect() {
+            log('🚀 Redirect service started');
+            
+            const params = getUrlParams();
+            log('📋 URL params: ' + JSON.stringify(params, null, 2));
+            
+            // Get the target app URL from the 'app' parameter
+            let appUrl = params.app;
+            
+            if (!appUrl) {
+                log('❌ No app parameter found');
+                showMessage('❌ No app URL found in the redirect link.', 'error');
+                return;
+            }
+            
+            // Decode the URL if it's encoded
+            try {
+                appUrl = decodeURIComponent(appUrl);
+                log('📱 Decoded app URL: ' + appUrl);
+            } catch (error) {
+                log('⚠️ Could not decode app URL: ' + error.message);
+            }
+            
+            // Build the final URL with auth tokens
+            const finalUrl = buildExpUrl(appUrl, params);
+            log('🎯 Final redirect URL: ' + finalUrl);
+            
+            // Show the manual buttons
+            const buttonsEl = document.getElementById('buttons');
+            const openButton = document.getElementById('openApp');
+            const copyButton = document.getElementById('copyLink');
+            
+            openButton.href = finalUrl;
+            buttonsEl.style.display = 'block';
+            
+            // Set up copy button
+            copyButton.onclick = (e) => {
+                e.preventDefault();
+                copyToClipboard(finalUrl);
+            };
+            
+            // Update status based on whether we have auth tokens
+            const statusEl = document.getElementById('status');
+            if (params.access_token || params.refresh_token) {
+                statusEl.textContent = 'Authentication successful! Opening app...';
+                showMessage('✅ Login successful! The app should open automatically. If not, tap the button above.', 'success');
+                log('✅ Auth tokens found - attempting redirect');
+                
+                // Attempt automatic redirect after 2 seconds
+                setTimeout(() => {
+                    log('🔄 Attempting automatic redirect...');
+                    try {
+                        window.location.href = finalUrl;
+                    } catch (error) {
+                        log('❌ Automatic redirect failed: ' + error.message);
+                        showMessage('Automatic redirect failed. Please tap the "Open Travel Compass" button.', 'error');
+                    }
+                }, 2000);
+            } else {
+                statusEl.textContent = 'Ready to open app';
+                showMessage('🔗 App link ready. Tap the button above to open Travel Compass.', 'success');
+                log('ℹ️ No auth tokens found - manual redirect only');
+            }
+        }
+        
+        // Start the redirect process when page loads
+        window.addEventListener('load', redirect);
+        
+        // Also try again if the hash changes (in case tokens arrive later)
+        window.addEventListener('hashchange', redirect);
     </script>
 </body>
 </html> 
