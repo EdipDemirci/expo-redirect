@@ -25,40 +25,35 @@
         .spinner { 
             font-size: 48px; 
             animation: spin 2s linear infinite; 
-            margin-bottom: 20px;
+            margin: 20px 0;
         }
         @keyframes spin { 
             0% { transform: rotate(0deg); } 
             100% { transform: rotate(360deg); } 
         }
-        h1 { color: #333; margin-bottom: 15px; }
-        p { color: #666; margin-bottom: 25px; }
-        .button { 
-            background: #007AFF; 
-            color: white; 
-            padding: 15px 30px; 
-            border: none; 
-            border-radius: 12px; 
-            font-size: 16px; 
-            text-decoration: none; 
-            display: inline-block; 
-            margin: 10px;
-            font-weight: 600;
-        }
-        .button:hover { background: #0056CC; }
         .debug { 
-            background: #f8f9fa; 
-            border: 1px solid #dee2e6; 
-            border-radius: 8px; 
+            background: #f5f5f5; 
             padding: 15px; 
-            margin-top: 20px; 
+            border-radius: 8px; 
+            margin: 20px 0; 
             font-family: monospace; 
             font-size: 12px; 
-            text-align: left; 
-            white-space: pre-wrap; 
-            max-height: 200px; 
-            overflow-y: auto;
+            text-align: left;
+            word-break: break-all;
         }
+        .button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        .button:hover { background: #5a6fd8; }
+        .success { color: #22c55e; }
+        .error { color: #ef4444; }
     </style>
 </head>
 <body>
@@ -66,61 +61,108 @@
         <div class="spinner">🧭</div>
         <h1>Opening Travel Compass...</h1>
         <p id="status">Processing authentication...</p>
-        <div id="buttons" style="display:none;">
-            <a href="#" id="openApp" class="button">Open Travel Compass</a>
+        
+        <div class="debug">
+            <div><strong>🔍 Debug Info:</strong></div>
+            <div id="debug-info">Starting...</div>
         </div>
-        <div id="debug" class="debug"></div>
+        
+        <button class="button" onclick="manualRedirect()" id="manual-btn" style="display:none;">
+            Open Travel Compass
+        </button>
+        
+        <button class="button" onclick="copyLink()" id="copy-btn" style="display:none;">
+            Copy Link
+        </button>
     </div>
-    
+
     <script>
+        let finalExpUrl = '';
+        
         function log(message) {
             console.log(message);
-            const debugEl = document.getElementById('debug');
-            debugEl.textContent += message + '\n';
+            const debugDiv = document.getElementById('debug-info');
+            debugDiv.innerHTML += '<br/>📋 ' + message;
         }
-
-        function redirect() {
-            log('🚀 Redirect service started');
-            
-            // Get URL parameters
-            const urlParams = new URLSearchParams(window.location.search);
-            const targetApp = urlParams.get('app');
-            
-            log('🔍 Current URL: ' + window.location.href);
-            log('📋 URL params: ' + JSON.stringify(Object.fromEntries(urlParams), null, 2));
-            
-            if (targetApp) {
-                log('✅ Found app URL: ' + targetApp);
-                
-                // Show button and auto-redirect
-                const button = document.getElementById('openApp');
-                button.href = targetApp;
-                button.onclick = () => window.location.href = targetApp;
-                document.getElementById('buttons').style.display = 'block';
-                
-                document.getElementById('status').textContent = 'Ready! Tap the button to open the app, or wait 3 seconds...';
-                
-                // Auto redirect after 3 seconds
-                setTimeout(() => {
-                    log('🔄 Attempting automatic redirect...');
-                    window.location.href = targetApp;
-                }, 3000);
-                
-            } else {
-                log('❌ No app URL found in the redirect link.');
-                document.getElementById('status').textContent = 'No app URL found. Please try the magic link again.';
-                
-                // Still show a test button
-                const button = document.getElementById('openApp');
-                button.href = 'exp://192.168.1.102:8081';
-                button.textContent = 'Open App (Test)';
-                button.onclick = () => window.location.href = 'exp://192.168.1.102:8081';
-                document.getElementById('buttons').style.display = 'block';
+        
+        function updateStatus(message, isError = false) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = isError ? 'error' : 'success';
+        }
+        
+        function manualRedirect() {
+            if (finalExpUrl) {
+                window.location.href = finalExpUrl;
             }
         }
         
-        // Start redirect process
-        window.addEventListener('load', redirect);
+        function copyLink() {
+            if (finalExpUrl) {
+                navigator.clipboard.writeText(finalExpUrl);
+                updateStatus('Link copied to clipboard!');
+            }
+        }
+        
+        // Main processing function
+        function processAuth() {
+            log('🚀 Redirect service started');
+            
+            // Get current URL
+            const currentUrl = window.location.href;
+            log('📍 Current URL: ' + currentUrl);
+            
+            // Extract auth tokens from URL hash (Supabase format)
+            const hash = window.location.hash;
+            log('🔍 URL hash: ' + (hash || 'none'));
+            
+            if (!hash || hash.length <= 1) {
+                log('❌ No URL hash found');
+                updateStatus('No authentication data found', true);
+                return;
+            }
+            
+            // Parse hash parameters
+            const hashParams = new URLSearchParams(hash.substring(1));
+            const accessToken = hashParams.get('access_token');
+            const refreshToken = hashParams.get('refresh_token');
+            const tokenType = hashParams.get('token_type');
+            
+            log('🔑 Access token found: ' + !!accessToken);
+            log('🔑 Refresh token found: ' + !!refreshToken);
+            log('🔑 Token type: ' + (tokenType || 'none'));
+            
+            if (!accessToken) {
+                log('❌ No access token in URL hash');
+                updateStatus('Authentication failed - no access token', true);
+                return;
+            }
+            
+            // Build the exp:// URL with auth tokens
+            const expBaseUrl = 'exp://192.168.1.102:8081/--/auth/callback';
+            const authParams = new URLSearchParams();
+            authParams.set('access_token', accessToken);
+            if (refreshToken) authParams.set('refresh_token', refreshToken);
+            if (tokenType) authParams.set('token_type', tokenType);
+            
+            finalExpUrl = expBaseUrl + '#' + authParams.toString();
+            
+            log('✅ Built exp URL: ' + finalExpUrl);
+            updateStatus('Authentication successful! Opening app...');
+            
+            // Show manual buttons as backup
+            document.getElementById('manual-btn').style.display = 'inline-block';
+            document.getElementById('copy-btn').style.display = 'inline-block';
+            
+            // Try to redirect automatically after 2 seconds
+            setTimeout(() => {
+                log('🔄 Attempting automatic redirect...');
+                window.location.href = finalExpUrl;
+            }, 2000);
+        }
+        
+        // Start processing when page loads
+        window.onload = processAuth;
     </script>
 </body>
 </html>
