@@ -82,83 +82,45 @@
         function redirect() {
             log('🚀 Redirect service started');
             
-            // Get URL parameters and hash parameters
+            // Get URL parameters
             const urlParams = new URLSearchParams(window.location.search);
-            const hashParams = new URLSearchParams(window.location.hash.substring(1));
+            const targetApp = urlParams.get('app');
             
             log('🔍 Current URL: ' + window.location.href);
-            log('📋 URL search params: ' + window.location.search);
-            log('🔗 URL hash: ' + window.location.hash);
+            log('📋 URL params: ' + JSON.stringify(Object.fromEntries(urlParams), null, 2));
             
-            // Merge all parameters
-            const allParams = {};
-            for (const [key, value] of urlParams) {
-                allParams[key] = value;
-            }
-            for (const [key, value] of hashParams) {
-                allParams[key] = value;
-            }
-            
-            log('📊 All params: ' + JSON.stringify(allParams, null, 2));
-            
-            // Check for auth tokens (Supabase sends these in hash)
-            const hasAuthTokens = allParams.access_token || allParams.refresh_token;
-            
-            if (hasAuthTokens) {
-                log('✅ Found auth tokens!');
-                
-                // Build the exp:// URL for development
-                const devHost = '192.168.1.102:8081'; // Your current dev host
-                let expUrl = `exp://${devHost}/--/auth/callback`;
-                
-                // Add auth tokens to the URL hash
-                const authParams = [];
-                if (allParams.access_token) authParams.push(`access_token=${allParams.access_token}`);
-                if (allParams.refresh_token) authParams.push(`refresh_token=${allParams.refresh_token}`);
-                if (allParams.expires_in) authParams.push(`expires_in=${allParams.expires_in}`);
-                if (allParams.token_type) authParams.push(`token_type=${allParams.token_type}`);
-                
-                if (authParams.length > 0) {
-                    expUrl += '#' + authParams.join('&');
-                }
-                
-                log('🎯 Final exp URL: ' + expUrl);
+            if (targetApp) {
+                log('✅ Found app URL: ' + targetApp);
                 
                 // Show button and auto-redirect
                 const button = document.getElementById('openApp');
-                button.href = expUrl;
-                button.onclick = () => window.location.href = expUrl;
+                button.href = targetApp;
+                button.onclick = () => window.location.href = targetApp;
                 document.getElementById('buttons').style.display = 'block';
                 
-                document.getElementById('status').textContent = 'Authentication successful! Opening app...';
+                document.getElementById('status').textContent = 'Ready! Tap the button to open the app, or wait 3 seconds...';
                 
-                // Auto redirect after 2 seconds
+                // Auto redirect after 3 seconds
                 setTimeout(() => {
                     log('🔄 Attempting automatic redirect...');
-                    window.location.href = expUrl;
-                }, 2000);
+                    window.location.href = targetApp;
+                }, 3000);
                 
             } else {
-                log('❌ No auth tokens found');
-                document.getElementById('status').textContent = 'No authentication data found. Please try the magic link again.';
+                log('❌ No app URL found in the redirect link.');
+                document.getElementById('status').textContent = 'No app URL found. Please try the magic link again.';
                 
-                // Still show a basic exp URL button for testing
-                const devHost = '192.168.1.102:8081';
-                const basicExpUrl = `exp://${devHost}`;
-                
+                // Still show a test button
                 const button = document.getElementById('openApp');
-                button.href = basicExpUrl;
+                button.href = 'exp://192.168.1.102:8081';
                 button.textContent = 'Open App (Test)';
-                button.onclick = () => window.location.href = basicExpUrl;
+                button.onclick = () => window.location.href = 'exp://192.168.1.102:8081';
                 document.getElementById('buttons').style.display = 'block';
-                
-                log('🔗 Basic exp URL for testing: ' + basicExpUrl);
             }
         }
         
         // Start redirect process
         window.addEventListener('load', redirect);
-        window.addEventListener('hashchange', redirect);
     </script>
 </body>
 </html>
