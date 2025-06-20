@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Opening Travel Compass...</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 40px 20px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 100%;
+        }
+        
+        .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            animation: spin 2s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        
+        p {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        
+        .button {
+            background: #007AFF;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 12px;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        
+        .button:hover {
+            background: #0056CC;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f1b0b7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🧭</div>
+        <h1>Opening Travel Compass...</h1>
+        <p id="status">Redirecting you to the app...</p>
+        
+        <a href="#" id="openApp" class="button" style="display: none;">
+            Open Travel Compass
+        </a>
+        
+        <div id="message" class="status" style="display: none;"></div>
+    </div>
+
+    <script>
+        function getUrlParams() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const hashParams = new URLSearchParams(window.location.hash.substring(1));
+            
+            // Merge both URL params and hash params
+            const allParams = {};
+            for (const [key, value] of urlParams) {
+                allParams[key] = value;
+            }
+            for (const [key, value] of hashParams) {
+                allParams[key] = value;
+            }
+            
+            return allParams;
+        }
+        
+        function buildExpUrl(baseUrl, params) {
+            const url = new URL(baseUrl);
+            
+            // Add auth parameters to the URL hash
+            const authParams = [];
+            if (params.access_token) authParams.push(`access_token=${params.access_token}`);
+            if (params.refresh_token) authParams.push(`refresh_token=${params.refresh_token}`);
+            if (params.expires_in) authParams.push(`expires_in=${params.expires_in}`);
+            if (params.token_type) authParams.push(`token_type=${params.token_type}`);
+            
+            if (authParams.length > 0) {
+                url.hash = authParams.join('&');
+            }
+            
+            return url.toString();
+        }
+        
+        function redirect() {
+            const params = getUrlParams();
+            console.log('Received params:', params);
+            
+            // Get the target app URL from the 'app' parameter
+            let appUrl = params.app;
+            
+            if (!appUrl) {
+                // Default to development URL if no app parameter
+                appUrl = 'exp://192.168.1.102:8081/--/auth/callback';
+            } else {
+                // Decode the URL if it's encoded
+                appUrl = decodeURIComponent(appUrl);
+            }
+            
+            // Build the final URL with auth tokens
+            const finalUrl = buildExpUrl(appUrl, params);
+            
+            console.log('Final redirect URL:', finalUrl);
+            
+            // Show the manual button
+            const button = document.getElementById('openApp');
+            button.href = finalUrl;
+            button.style.display = 'inline-block';
+            
+            // Update status
+            const statusEl = document.getElementById('status');
+            if (params.access_token) {
+                statusEl.textContent = 'Authentication successful! Opening app...';
+                showMessage('✅ Login successful! If the app doesn\'t open automatically, tap the button below.', 'success');
+                
+                // Attempt automatic redirect after 1 second
+                setTimeout(() => {
+                    window.location.href = finalUrl;
+                }, 1000);
+            } else {
+                statusEl.textContent = 'No authentication data received.';
+                showMessage('⚠️ No authentication data found in the URL. Please try the magic link again.', 'error');
+            }
+        }
+        
+        function showMessage(text, type) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = text;
+            messageEl.className = `status ${type}`;
+            messageEl.style.display = 'block';
+        }
+        
+        // Start the redirect process
+        redirect();
+    </script>
+</body>
+</html> 
